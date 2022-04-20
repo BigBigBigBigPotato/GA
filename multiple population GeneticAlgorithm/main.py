@@ -2,13 +2,18 @@ import random
 import math
 import turtle
 import numpy as np
+import copy
 
-# pop_size表示种群数量,DNA_size表示拣选数量,K_Bound表示区域范围，X_Bound表示行数范围,Y_Bound表示列数范围
-POP_size = 10
+# pop_size表示种群数量,DNA_size表示拣选数量,K_Bound表示区域范围，X_Bound表示行数范围,Y_Bound表示列数范围,Pc为交叉率，Pm为变异率
+
+POP_size = 200
 DNA_size = 5
 K_Bound = [1, 4]
 X_Bound = [1, 10]
 Y_Bound = [1, 10]
+Pc = 0.8
+Pm = 0.02
+Generation = 1000  # 迭代次数
 
 
 # 定义画一个运输单位的函数
@@ -133,6 +138,7 @@ def Distance(coordinate1, coordinate2):
 # 计算每一个个体被选中的概率，得到适应度列表
 def get_fitness(pop, individual):
     fitness = []
+    # 计算每一个个体的的适应度，即 1 / 距离distance
     for i in range(len(pop)):
         distance = 0
         for j in range(len(pop[i])):
@@ -147,11 +153,98 @@ def get_fitness(pop, individual):
 
 
 # 物竞天择，适者生存。选择函数选出存活的个体
-#def select(pop,fitness):
+def select(pop, fitness):
+    pop = np.asarray(pop)
+    fitness = np.asarray(fitness)
+    index = np.random.choice(np.arange(0, len(pop)), size=POP_size, replace=True, p=fitness / (fitness.sum()))
+    return pop[index]
 
-pop = init_pop(POP_size, DNA_size, K_Bound, X_Bound, Y_Bound)[0]
-individual = init_pop(POP_size, DNA_size, K_Bound, X_Bound, Y_Bound)[1]
+
+# 染色体交叉
+def chromosome_crossover(a, b, father, mother):
+    # 找出两个染色体交叉部分的独特基因
+    father_unique = []
+    mother_unique = []
+    for i in father[a: b]:
+        if i not in mother[a:b]:
+            father_unique.append(i)
+    for i in mother[a: b]:
+        if i not in father[a:b]:
+            mother_unique.append(i)
+    father_unique_copy = father_unique.copy()
+    # 父亲与母亲的染色体交叉
+    father[a:b], mother[a:b] = mother[a:b], father[a:b]
+    # 确保交叉后每一个染色体上的基因都不重复
+    for i in range(len(father)):
+        if (i < a or i >= b) and (father[i] in mother_unique):
+            temp = random.choice(father_unique)
+            father[i] = temp
+            father_unique.remove(father[i])
+        if len(father_unique) == 0:
+            break
+    father_unique = father_unique_copy.copy()
+    for i in range(len(mother)):
+        if (i < a or i >= b) and (mother[i] in father_unique):
+            temp = random.choice(mother_unique)
+            mother[i] = temp
+            mother_unique.remove(mother[i])
+        if len(mother_unique) == 0:
+            break
+    return father, mother
+
+
+# 交叉函数
+def crossover(pop, cross_rate):
+    # pop = pop.tolist()
+    new_pop = copy.deepcopy(pop)
+    for i in range(len(pop) // 2):
+        # 如果种群只剩一个个体，则不进行繁殖，直接跳出循环
+        if len(pop) == 1:
+            break
+        father = pop[0]
+        mom = pop[random.randint(1, len(pop) - 1)]
+        pop.remove(father)
+        pop.remove(mom)
+        if np.random.rand() < cross_rate:
+            a, b = np.random.choice(np.arange(0, DNA_size), size=2, replace=False)
+            child1, child2 = chromosome_crossover(min(a, b), max(a, b), father, mom)
+            child1 = mutation(child1, Pm)
+            child2 = mutation(child1, Pm)
+            new_pop.append(child1)
+            new_pop.append(child2)
+    return new_pop
+
+
+# 变异函数，变异策略采取随机选取两个点，将其对换位置
+def mutation(child, mutation_rate):
+    if np.random.rand() < mutation_rate:
+        a, b = np.random.choice(np.arange(0, DNA_size), size=2, replace=False)
+        child[a], child[b] = child[b], child[a]
+        # child[min(a, b): max(a, b)] = child[max(a, b)-1:min(a, b)-1:-1]
+    return child
+
+
+def print_info(pop, individual):
+    fitness = get_fitness(pop, individual)
+    max_fitness_index = fitness.index(max(fitness))
+    print("最近距离路线:", pop[max_fitness_index])
+    print("距离为:", 1 / max(fitness))
+    print("----------------------------------------------------------------------------------------------------")
+
+
+pop, individual = init_pop(POP_size, DNA_size, K_Bound, X_Bound, Y_Bound)
+'''
 print(pop)
 print(individual)
 fitness = get_fitness(pop, individual)
 print(fitness)
+# fitness = np.asarray(fitness)
+# print(fitness/fitness.sum())
+'''
+for i in range(Generation):
+    pop = crossover(pop, Pc)
+    fitness = get_fitness(pop, individual)
+    pop = select(pop, fitness)
+    pop = pop.tolist()
+    print_info(pop, individual)
+
